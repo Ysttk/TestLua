@@ -132,10 +132,10 @@ void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, ch
 	
 	lua_pushlightuserdata(l, (void*)funcDesc);
 	lua_pushcclosure(l, stubFunc, 1);
-	lua_setfield(l, LUA_GLOBALSINDEX, funcNameInLua);
+	lua_setglobal(l, funcNameInLua);
 }
 
-#define RegistLuaCFunction(l,cFunc, argDesc) _RegistLuaCFunction(l, CFuncSubForAllCFunInLua, (FuncType)cFunc, #cFunc, argDesc)
+#define RegistLuaCFunction(l, cFunc, argDesc) _RegistLuaCFunction(l, CFuncSubForAllCFunInLua, (FuncType)cFunc, #cFunc, argDesc)
 
 
 
@@ -145,41 +145,87 @@ void* __InsertArgByArgType(void* stackPoint, lua_State* l, char argType)
 		case 'b': {
 			bool v = lua_toboolean(l, -1);
 			*((bool*)stackPoint) = v;
+			stackPoint = ((char*)stackPoint)+1;
 				  }
 			break;	  
 		case 's': {
 			INT16 v = (INT16)lua_tointeger(l, -1);
-			*(((INT16*)stackPoint)++) = v;
+			*(((INT16*)stackPoint)) = v;
+			stackPoint = ((INT16*)stackPoint)+1;
 				  }
 			break;
-		case 'i':
+		case 'i': {
 			INT32 v = (INT32)lua_tointeger(l, -1);
-			*(((INT16*)stackPoint)++) = v;
+			*(((INT32*)stackPoint)) = v;
+			stackPoint = ((INT32*)stackPoint)+1;
+				  }
 			break;
-		case 'I':
+		case 'I': {
 			INT64 v = (INT64)lua_tointeger(l, -1);
-			*(((INT64*)stackPoint)++) = v;
+			*(((INT64*)stackPoint)) = v;
+			stackPoint = ((INT64*)stackPoint)+1;
+				  }
 			break;
-		case 'u':
+		case 'u': {
 			UINT32 v = (UINT32)lua_tointeger(l, -1);
-			*(((UINT32*)stackPoint)++) = v;
+			*(((UINT32*)stackPoint)) = v;
+			stackPoint = ((UINT32*)stackPoint)+1;
+				  }
 			break;
-		case 'U':
+		case 'U': {
 			UINT64 v = (UINT64)lua_tointeger(l, -1);
-			*(((UINT64*)stackPoint)++) = v;
+			*(((UINT64*)stackPoint)) = v;
+			stackPoint = ((UINT64*)stackPoint)+1;
+				  }
 			break;
-		case 'S':
-			char* v = lua_tostring(l, -1);
+		case 'S': {
+			const char* v = lua_tostring(l, -1);
 			char* vv = new char[strlen(v)+1];
 			strcpy(vv, v);
-			*(((char**)stackPoint)++) = vv;
+			*(((char**)stackPoint)) = vv;
+			stackPoint = ((char**)stackPoint)+1;
+				  }
 			break;
-		case 'c':
-			char* v = lua_tostring(l, -1);
-			*(((char*)stackPoint)++) = *v;
+		case 'c': {
+			const char* v = lua_tostring(l, -1);
+			*(((char*)stackPoint)) = *v;
+			stackPoint = ((char*)stackPoint)+1;
+				  }
 			break;
 	}
 	return stackPoint;
+}
+
+void __PushRetByArgType(lua_State* l, INT64 genRetVal, char retType)
+{
+	switch (retType) {
+		case 'b': {
+			int retVal = (int)genRetVal;
+			lua_pushboolean(l, retVal);
+				  }
+			break;
+		case 's':
+		case 'i':
+		case 'I':
+		case 'u':
+		case 'U': {
+			lua_Number retVal = (lua_Number)genRetVal;
+			lua_pushnumber(l, retVal);
+				  }
+			break;
+		case 'c': {
+			char retVal[2];
+			retVal[0] = (char)genRetVal;
+			retVal[1] = 0;
+			lua_pushstring(l, retVal);
+				  }
+			break;
+		case 'S': {
+			char* retVal = (char*)genRetVal;
+			lua_pushstring(l, retVal);
+				  }
+			break;
+	}
 }
 
 int CFuncSubForAllCFunInLua(lua_State* l)
@@ -203,7 +249,15 @@ int CFuncSubForAllCFunInLua(lua_State* l)
 
 	funcDesc->cFunc();
 
+	INT64 retVal;
+	//...TODO: Fix return values
+	//
 	
+	if (splitIdx > 0) {
+		strncpy(tmp, funcDesc->argDesc, splitIdx);
+		int retLen = splitIdx;
+		__PushRetByArgType(l, retVal, tmp[0]); //这里只处理了一个返回值的情况
+	}
 
 	return 0;
 }
@@ -223,7 +277,7 @@ void _RegistLuaCClass(lua_State*l, char* className)
 {
 	lua_newtable(l);
 	int tblIdx = lua_gettop(l);
-	lua_setfield(l, LUA_GLOBALSINDEX, className);
+	lua_setglobal(l, className);
 }
 
 #define RegistLuaCClass(l,class) _RegistLuaCClass(l, #class)
@@ -238,8 +292,11 @@ void _RegistLuaCClassFunction(lua_State* l,char* className,FuncType cFunc, char*
 #define RegistLuaCClassFunction(l, className, func, argDesc)  _RegistLuaCClassFunction(l, #className, (FuncType)func, #func, argDesc)
 
 
-
+#ifdef WIN
 int _tmain(int argc, _TCHAR* argv[])
+#else
+int main(int argc, char* argv[])
+#endif
 {
 	lua_State* l;
 	int re;
@@ -250,33 +307,34 @@ int _tmain(int argc, _TCHAR* argv[])
 	//C、C++调用Lua函数
 	//re = luaL_loadstring(l, "function Pfunc() print([[hello world]]) end");
 	//re = luaL_dostring(l, "function P() print([[hello world]]) end");
-	//lua_getfield(l, LUA_GLOBALSINDEX, "P");
+	//lua_getglobal(l, "P");
 	//if (lua_type(l,-1)!=LUA_TFUNCTION)
 	//	printf("%s\n", lua_typename(l, lua_type(l, -1)));
 	//else
 	//	re = lua_pcall(l, 0, 0, 0);
 
 	//lua调用C函数、变量
-	//lua_pushcfunction(l, CallHelloWorld);
-	//lua_setfield(l, LUA_GLOBALSINDEX, "HelloWorld");
-	//re = luaL_dostring(l, "print(HelloWorld(2.5,[[abc]]))");
+	lua_pushcfunction(l, CallHelloWorld);
+	lua_setglobal(l, "HelloWorld");
+	luaL_dostring(l, "print(HelloWorld)");
+	re = luaL_dostring(l, "print(HelloWorld(2.5,[[abc]]))");
 
 	//以下设置C变量的回调失败，原因不明
 	//double start = 1.0;
 	//printf("start value before lua:%lf\n", start);
 	//lua_pushnumber(l, start);
-	//lua_setfield(l, LUA_GLOBALSINDEX, "start");
+	//lua_setglobal(l, "start");
 	//lua_newtable(l);
-	//lua_setfield(l, LUA_GLOBALSINDEX, "DoubleMT");
-	//lua_getfield(l, LUA_GLOBALSINDEX, "DoubleMT");
+	//lua_setglobal(l, "DoubleMT");
+	//lua_getglobal(l, "DoubleMT");
 	//int doubleMtIdx = lua_gettop(l);
 	//lua_pushlightuserdata(l, &start);
 	//lua_pushcclosure(l, __CallAdd, 1);
 	//int v1 = lua_gettop(l);
 	//lua_setfield(l, doubleMtIdx, "__cAdd");
 	//luaL_dostring(l, "function DoubleMT.__add(op1, op2) print([[add called]]) DoubleMT.__cAdd(op2) return op1+op2 end function DoubleMT.__index(tbl, k) print([[index called]]) end");
-	////lua_getfield(l, LUA_GLOBALSINDEX, "start");
-	////lua_getfield(l, LUA_GLOBALSINDEX, "DoubleMT");
+	////lua_getglobal(l, "start");
+	////lua_getglobal(l, "DoubleMT");
 	////lua_setmetatable(l, -2);
 	//luaL_dostring(l, "print(debug.setmetatable(start, DoubleMT)) print (debug.getmetatable(start).__index) ");
 	//re = luaL_dostring(l, "start=start+1 print([[start value]], start)");
