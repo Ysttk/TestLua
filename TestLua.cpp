@@ -74,6 +74,8 @@ u -- unsigned int32
 U -- unsigned int64
 S -- string
 c -- char
+f -- float
+d -- double
 */
 
 int TypeSize[256];
@@ -87,7 +89,8 @@ bool InitTypeSize()
 	TypeSize['u'] = 4;
 	TypeSize['U'] = 8;
 	TypeSize['S'] = 8;
-	TypeSize['c'] = 1;
+	TypeSize['f'] = 4;
+	TypeSize['d'] = 8;
 	return true;
 }
 int initialized = InitTypeSize();
@@ -109,7 +112,7 @@ int CalculateTypeListSize(char* typeList)
 }
 
 
-void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, char* funcNameInLua, char* argDesc)
+void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, const char* funcNameInLua, const char* argDesc)
 {
 	CFuncDescription* funcDesc = new CFuncDescription();
 	funcDesc->argDesc = new char[strlen(argDesc)+1];
@@ -121,10 +124,12 @@ void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, ch
 	char argTypes[20], retTypes[20];
 	if (i>0) {
 		strncpy(retTypes, argDesc, i);
+		retTypes[i]=0;
 		funcDesc->retSizeInByte = CalculateTypeListSize(retTypes);
 	}
 	if (i<len-1) {
 		strncpy(argTypes, &argDesc[i+1], len-i);
+		argTypes[len-i]=0;
 		funcDesc->argSizeInByte = CalculateTypeListSize(argTypes);
 	}
 	funcDesc->cFunc = cFunc;
@@ -135,7 +140,7 @@ void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, ch
 	lua_setglobal(l, funcNameInLua);
 }
 
-#define RegistLuaCFunction(l, cFunc, argDesc) _RegistLuaCFunction(l, CFuncSubForAllCFunInLua, (FuncType)cFunc, #cFunc, argDesc)
+#define RegistLuaCFunction(l, cFunc, argDesc) _RegistLuaCFunction(l, CFuncStubForAllCFunInLua, (FuncType)cFunc, #cFunc, argDesc)
 
 
 
@@ -192,6 +197,18 @@ void* __InsertArgByArgType(void* stackPoint, lua_State* l, char argType)
 			stackPoint = ((char*)stackPoint)+1;
 				  }
 			break;
+		case 'f': {
+			float v = (float)lua_tonumber(l, -1);
+			*((float*)stackPoint) = v;
+			stackPoint = ((float*)stackPoint)+1;
+				  }
+			break;
+		case 'd': {
+			double v = (double)lua_tonumber(l, -1);
+			*((double*)stackPoint) = v;
+			stackPoint = ((double*)stackPoint)+1;
+				  }
+			break;
 	}
 	return stackPoint;
 }
@@ -225,10 +242,21 @@ void __PushRetByArgType(lua_State* l, INT64 genRetVal, char retType)
 			lua_pushstring(l, retVal);
 				  }
 			break;
+		case 'f': {
+			float* tv = (float*)&genRetVal;
+			float v = *(tv+1);
+			lua_pushnumber(l, (lua_Number)v);
+				  }
+			break;
+		case 'd': {
+			double v = *((double*)&genRetVal);
+			lua_pushnumber(l, (lua_Number)v);
+				  }
+			break;
 	}
 }
 
-int CFuncSubForAllCFunInLua(lua_State* l)
+int CFuncStubForAllCFunInLua(lua_State* l)
 {
 	CFuncDescription* funcDesc = (CFuncDescription*)lua_touserdata(l, lua_upvalueindex(1));
 	char tmp[20];
@@ -240,6 +268,7 @@ int CFuncSubForAllCFunInLua(lua_State* l)
 		char tmpBuf[512];
 		void* currPoint = argSpace;
 		strncpy(tmp, &funcDesc->argDesc[splitIdx], strlen(funcDesc->argDesc)-splitIdx);
+		tmp[strlen(funcDesc->argDesc)-splitIdx] = 0;
 		int argLen = strlen(funcDesc->argDesc)-splitIdx;
 		for (int i=0; i<argLen; i++) {
 			currPoint = __InsertArgByArgType(currPoint, l, tmp[argLen-i-1]);
@@ -255,6 +284,7 @@ int CFuncSubForAllCFunInLua(lua_State* l)
 	
 	if (splitIdx > 0) {
 		strncpy(tmp, funcDesc->argDesc, splitIdx);
+		tmp[splitIdx]=0;
 		int retLen = splitIdx;
 		__PushRetByArgType(l, retVal, tmp[0]); //这里只处理了一个返回值的情况
 	}
@@ -314,10 +344,15 @@ int main(int argc, char* argv[])
 	//	re = lua_pcall(l, 0, 0, 0);
 
 	//lua调用C函数、变量
-	lua_pushcfunction(l, CallHelloWorld);
-	lua_setglobal(l, "HelloWorld");
-	luaL_dostring(l, "print(HelloWorld)");
-	re = luaL_dostring(l, "print(HelloWorld(2.5,[[abc]]))");
+	//lua_pushcfunction(l, CallHelloWorld);
+	//lua_setglobal(l, "HelloWorld");
+	//luaL_dostring(l, "print(HelloWorld)");
+	//re = luaL_dostring(l, "print(HelloWorld(2.5,[[abc]]))");
+	
+	//lua调用C函数、变量；C函数使用通用Stub函数注册
+	RegistLuaCFunction(l, HelloWorld, "i:dS");
+	luaL_dostring(l, "print(HelloWorld");
+	luaL_dostring(l, "print(HelloWorld(2.5, [[abc]])");
 
 	//以下设置C变量的回调失败，原因不明
 	//double start = 1.0;
