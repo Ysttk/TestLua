@@ -88,7 +88,7 @@ bool InitTypeSize()
 	TypeSize['I'] = 8;
 	TypeSize['u'] = 4;
 	TypeSize['U'] = 8;
-	TypeSize['S'] = 8;
+	TypeSize['S'] = sizeof(void*);
 	TypeSize['f'] = 4;
 	TypeSize['d'] = 8;
 	return true;
@@ -142,7 +142,7 @@ void _RegistLuaCFunction(lua_State* l, StubFuncType stubFunc, FuncType cFunc, co
 
 #define RegistLuaCFunction(l, cFunc, argDesc) _RegistLuaCFunction(l, CFuncStubForAllCFunInLua, (FuncType)cFunc, #cFunc, argDesc)
 
-
+ 
 
 void* __InsertArgByArgType(void* stackPoint, lua_State* l, char argType)
 {
@@ -267,9 +267,9 @@ int CFuncStubForAllCFunInLua(lua_State* l)
 		void* argSpace = alloca(funcDesc->argSizeInByte);
 		char tmpBuf[512];
 		void* currPoint = argSpace;
-		strncpy(tmp, &funcDesc->argDesc[splitIdx], strlen(funcDesc->argDesc)-splitIdx);
-		tmp[strlen(funcDesc->argDesc)-splitIdx] = 0;
-		int argLen = strlen(funcDesc->argDesc)-splitIdx;
+		strncpy(tmp, &funcDesc->argDesc[splitIdx+1], strlen(funcDesc->argDesc)-splitIdx-1);
+		tmp[strlen(funcDesc->argDesc)-splitIdx-1] = 0;
+		int argLen = strlen(funcDesc->argDesc)-splitIdx-1;
 		for (int i=0; i<argLen; i++) {
 			currPoint = __InsertArgByArgType(currPoint, l, tmp[argLen-i-1]);
 			lua_pop(l, 1);
@@ -351,8 +351,8 @@ int main(int argc, char* argv[])
 	
 	//lua调用C函数、变量；C函数使用通用Stub函数注册
 	RegistLuaCFunction(l, HelloWorld, "i:dS");
-	luaL_dostring(l, "print(HelloWorld");
-	luaL_dostring(l, "print(HelloWorld(2.5, [[abc]])");
+	luaL_dostring(l, "print(HelloWorld)");
+	luaL_dostring(l, "print(HelloWorld(2.5, [[abc]]))");
 
 	//以下设置C变量的回调失败，原因不明
 	//double start = 1.0;

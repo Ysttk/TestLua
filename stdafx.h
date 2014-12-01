@@ -5,8 +5,8 @@
 
 #pragma once
 
-#define MAC
-//#define WIN
+//#define MAC
+#define WIN
 
 
 #ifdef WIN
@@ -20,6 +20,8 @@
 #endif
 
 #include <stdio.h>
+
+#ifndef WIN
 #include <cstdint>
 
 #define INT16 int16_t
@@ -27,6 +29,13 @@
 #define INT64 int64_t
 #define UINT32 uint32_t
 #define UINT64 uint64_t
+#else
+#define INT16 short
+#define INT32 int
+#define INT64 long long
+#define UINT32 unsigned int
+#define UINT64 unsigned long long 
+#endif
 
 #ifdef WIN
 #include <tchar.h>
