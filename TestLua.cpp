@@ -264,32 +264,65 @@ int CFuncStubForAllCFunInLua(lua_State* l)
 	for (splitIdx=0; splitIdx<strlen(funcDesc->argDesc); splitIdx++)
 		if (funcDesc->argDesc[splitIdx] == ':') break;
 	if (splitIdx<strlen(funcDesc->argDesc)) {
-		void* argSpace = alloca(funcDesc->argSizeInByte);
+		//void* argSpace = alloca(funcDesc->argSizeInByte);
+		//alloca函数不会老老实实按照传入的大小扩展堆栈，因此，这里只能手写来扩展堆栈
+		void* argSpace;
+#ifdef WIN
+		void* tmpStore1, *tmpStore2;
+		int argSize = funcDesc->argSizeInByte;
+		__asm {
+			mov tmpStore1, eax;
+			mov eax, argSize;
+			sub esp, eax;
+			mov argSpace, esp;
+			mov eax, tmpStore1;
+		}
+#endif
 		char tmpBuf[512];
 		void* currPoint = argSpace;
 		strncpy(tmp, &funcDesc->argDesc[splitIdx+1], strlen(funcDesc->argDesc)-splitIdx-1);
 		tmp[strlen(funcDesc->argDesc)-splitIdx-1] = 0;
 		int argLen = strlen(funcDesc->argDesc)-splitIdx-1;
+		currPoint = (char*)currPoint + funcDesc->argSizeInByte;
 		for (int i=0; i<argLen; i++) {
-			currPoint = __InsertArgByArgType(currPoint, l, tmp[argLen-i-1]);
+			currPoint = (char*)currPoint - TypeSize[tmp[argLen-i-1]];
+			__InsertArgByArgType(currPoint, l, tmp[argLen-i-1]);
 			lua_pop(l, 1);
 		}
 	}
 
-	funcDesc->cFunc();
+	funcDesc->cFunc();	//调用那个函数
 
-	INT64 retVal;
-	//...TODO: Fix return values
-	//
-	
+	void* retVal;
+#ifdef WIN
+	__asm {
+		mov retVal, eax;
+	}
+#endif
+	int retNum = 0;
 	if (splitIdx > 0) {
 		strncpy(tmp, funcDesc->argDesc, splitIdx);
 		tmp[splitIdx]=0;
+		retNum =1;
 		int retLen = splitIdx;
-		__PushRetByArgType(l, retVal, tmp[0]); //这里只处理了一个返回值的情况
+		__PushRetByArgType(l, (INT64)retVal, tmp[0]); //这里只处理了一个返回值的情况，多个返回值可以用vector包装返回处理一下
 	}
 
-	return 0;
+	if (funcDesc->argSizeInByte >0 ) {
+		//平堆栈
+#ifdef WIN
+		int argSize = funcDesc->argSizeInByte;
+		void* tmpStore;
+		__asm {
+			mov tmpStore, eax;
+			mov eax, argSize;
+			add esp, eax;
+			mov eax, tmpStore;
+		}
+#endif
+	}
+
+	return retNum;
 }
 
 
