@@ -185,7 +185,7 @@ void* __InsertArgByArgType(void* stackPoint, lua_State* l, char argType)
 			break;
 		case 'S': {
 			const char* v = lua_tostring(l, -1);
-			char* vv = new char[strlen(v)+1];
+			char* vv = new char[strlen(v)+1];	//这里需要回收操作！！本例子中没有处理
 			strcpy(vv, v);
 			*(((char**)stackPoint)) = vv;
 			stackPoint = ((char**)stackPoint)+1;
@@ -277,6 +277,8 @@ int CFuncStubForAllCFunInLua(lua_State* l)
 			mov argSpace, esp;
 			mov eax, tmpStore1;
 		}
+#else
+#error "Not Implemented Platform"
 #endif
 		char tmpBuf[512];
 		void* currPoint = argSpace;
@@ -332,7 +334,7 @@ int CFuncStubForAllCFunInLua(lua_State* l)
 
 class A {
 	public:
-		void SayHello() { printf("Hello World from class member function A.SayHello()\n"); }
+		void SayHello() { printf("Hello World from class member function A(%x).SayHello()\n", this); }
 };
 
 
@@ -384,7 +386,6 @@ int main(int argc, char* argv[])
 	
 	//lua调用C函数、变量；C函数使用通用Stub函数注册
 	RegistLuaCFunction(l, HelloWorld, "i:dS");
-	luaL_dostring(l, "print(HelloWorld)");
 	luaL_dostring(l, "print(HelloWorld(2.5, [[abc]]))");
 
 	//以下设置C变量的回调失败，原因不明
